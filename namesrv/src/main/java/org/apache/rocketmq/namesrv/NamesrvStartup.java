@@ -54,6 +54,7 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
+            // 创建nameServer控制器
             NamesrvController controller = createNamesrvController(args);
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
@@ -72,7 +73,9 @@ public class NamesrvStartup {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         //PackageConflictDetect.detectFastjson();
 
+        //构建命令行参数选项，包含-h（打印帮助信息），-n（指定nameSrv地址列表）
         Options options = ServerUtil.buildCommandlineOptions(new Options());
+        //解析启动参数，其中buildCommandlineOptions构建了一些参数选项，包含-c（指定nameSrv启动配置文件），-p（打印所有配置项）
         commandLine = ServerUtil.parseCmdLine("mqnamesrv", args, buildCommandlineOptions(options), new PosixParser());
         if (null == commandLine) {
             System.exit(-1);
