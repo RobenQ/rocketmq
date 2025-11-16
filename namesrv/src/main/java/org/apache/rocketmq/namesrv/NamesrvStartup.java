@@ -54,8 +54,9 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
-            // 创建nameServer控制器
+            // 创建NamesrvController
             NamesrvController controller = createNamesrvController(args);
+            //启动NamesrvController
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
             log.info(tip);
@@ -157,12 +158,14 @@ public class NamesrvStartup {
             throw new IllegalArgumentException("NamesrvController is null");
         }
 
+        // 初始化NamesrvController
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
             System.exit(-3);
         }
 
+        //注册程序退出前的回调，会关闭NamesrvController
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
             @Override
             public Void call() throws Exception {
@@ -171,6 +174,7 @@ public class NamesrvStartup {
             }
         }));
 
+        // 启动NamesrvController
         controller.start();
 
         return controller;

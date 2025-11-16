@@ -83,8 +83,10 @@ public class NamesrvController {
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        // 注册默认请求处理器DefaultRequestProcessor，请求处理器用于处理broker、producer和consumer的请求
         this.registerProcessor();
 
+        // 注册broker探活定时任务，每10s检测一次
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -93,6 +95,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        // 注册打印所有配置信息的定时任务，每10m打印一次
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -162,8 +165,11 @@ public class NamesrvController {
     }
 
     public void shutdown() {
+        // 关闭netty服务器
         this.remotingServer.shutdown();
+        // 关闭处理网络请求的线程池
         this.remotingExecutor.shutdown();
+        // 关闭处理定时任务的线程池
         this.scheduledExecutorService.shutdown();
 
         if (this.fileWatchService != null) {
