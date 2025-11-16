@@ -48,10 +48,15 @@ import org.apache.rocketmq.remoting.common.RemotingUtil;
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+    // 读写锁，修改路由信息时需要加锁，使用读写锁提高性能
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    // topic---brokerName维度路由信息，记录了topic下所有的broker列表，每个broker信息包含读写队列的数量
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    // brokerName主从信息，相同brokerName的broker属于主从关系，brokerId为0的是主节点，不为0的都是从节点
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    // cluster---brokerName维度的路由信息，broker的集群信息，记录了每个集群下的所有brokerName
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    // broker的心跳信息，用于判断broker是否存活，心跳时间距检测时间超过120s则认为broker下线，每10s检测一次
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
