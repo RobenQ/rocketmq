@@ -157,6 +157,7 @@ public class NamesrvController {
     }
 
     public void start() throws Exception {
+        // 启动远程服务（netty）
         this.remotingServer.start();
 
         if (this.fileWatchService != null) {
