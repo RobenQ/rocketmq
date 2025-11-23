@@ -116,51 +116,69 @@ public class RouteInfoManager {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+                // 因为是更新路由表，加写锁
                 this.lock.writeLock().lockInterruptibly();
 
+                // 从集群信息中获取同集权的所有broker
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
+                // 集群不存在则新增集群
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
+                // 将当前broker加入集权列表
                 brokerNames.add(brokerName);
 
                 boolean registerFirst = false;
 
+                // 获取同broker的主从信息
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+                // 没有主从信息，则新增，说明当前broker为首次注册
+                // 如果集群信息不存在，能否说明当前broker为首次注册？？？
                 if (null == brokerData) {
                     registerFirst = true;
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
+                // 获取当前broker的主从节点所有地址信息
                 Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs();
                 //Switch slave to master: first remove <1, IP:PORT> in namesrv, then add <0, IP:PORT>
                 //The same IP:PORT must only have one record in brokerAddrTable
+
+                // 判断broker主从信息中是否有当前broker的信息
                 Iterator<Entry<Long, String>> it = brokerAddrsMap.entrySet().iterator();
                 while (it.hasNext()) {
                     Entry<Long, String> item = it.next();
+                    // 同地址不同id，说明当前主从信息发生了变化，移除当前遍历到的broker
                     if (null != brokerAddr && brokerAddr.equals(item.getValue()) && brokerId != item.getKey()) {
                         it.remove();
                     }
                 }
 
+                // 将当前broker加入主从信息列表
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
+                // 再次判断是否为首次主从
                 registerFirst = registerFirst || (null == oldAddr);
 
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
+                    // 当前是主节点，并且数据版本发生了变化，需要更新路由表的topic队列信息
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
                         || registerFirst) {
+                        // 获取当前broker的topic配置信息
                         ConcurrentMap<String, TopicConfig> tcTable =
                             topicConfigWrapper.getTopicConfigTable();
+                        // 配置存在，更新路由表的topic队列信息
                         if (tcTable != null) {
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
+                                // 更新路由表的topic队列信息
                                 this.createAndUpdateQueueData(brokerName, entry.getValue());
                             }
                         }
                     }
                 }
 
+                // broker的心跳信息
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -179,6 +197,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 如果当前broker不是主节点，则从路由表中获取同brokerName的主节点信息，返回主从同步地址和主节点地址
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
@@ -190,6 +209,7 @@ public class RouteInfoManager {
                     }
                 }
             } finally {
+                // finally中解锁
                 this.lock.writeLock().unlock();
             }
         } catch (Exception e) {
@@ -220,6 +240,7 @@ public class RouteInfoManager {
     }
 
     private void createAndUpdateQueueData(final String brokerName, final TopicConfig topicConfig) {
+        // 构建topic队列数据
         QueueData queueData = new QueueData();
         queueData.setBrokerName(brokerName);
         queueData.setWriteQueueNums(topicConfig.getWriteQueueNums());
@@ -227,22 +248,29 @@ public class RouteInfoManager {
         queueData.setPerm(topicConfig.getPerm());
         queueData.setTopicSynFlag(topicConfig.getTopicSysFlag());
 
+        // 获取现有的topic所有的队列信息
         List<QueueData> queueDataList = this.topicQueueTable.get(topicConfig.getTopicName());
+        // 不存在当前topic的队列信息，则新增
         if (null == queueDataList) {
             queueDataList = new LinkedList<QueueData>();
             queueDataList.add(queueData);
             this.topicQueueTable.put(topicConfig.getTopicName(), queueDataList);
             log.info("new topic registered, {} {}", topicConfig.getTopicName(), queueData);
         } else {
+            // 存在，则更新相同broker的队列信息
             boolean addNewOne = true;
 
             Iterator<QueueData> it = queueDataList.iterator();
             while (it.hasNext()) {
                 QueueData qd = it.next();
+                // 找到了相同的brokerName的信息
                 if (qd.getBrokerName().equals(brokerName)) {
+                    // QueueData重写的hashCode和equals方法
                     if (qd.equals(queueData)) {
+                        // 队列数据相同，不添加
                         addNewOne = false;
                     } else {
+                        // 队列数据发生变化，添加，移除旧数据
                         log.info("topic changed, {} OLD: {} NEW: {}", topicConfig.getTopicName(), qd,
                             queueData);
                         it.remove();
@@ -250,6 +278,7 @@ public class RouteInfoManager {
                 }
             }
 
+            // 需要添加
             if (addNewOne) {
                 queueDataList.add(queueData);
             }

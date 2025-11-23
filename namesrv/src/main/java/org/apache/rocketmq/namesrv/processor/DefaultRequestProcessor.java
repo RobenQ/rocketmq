@@ -88,6 +88,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
             case RequestCode.QUERY_DATA_VERSION:
                 return queryBrokerTopicConfig(ctx, request);
             case RequestCode.REGISTER_BROKER:
+                // 处理broker路由主从请求，注册路由信息，更新心跳检测信息
                 Version brokerVersion = MQVersion.value2Version(request.getVersion());
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
                     return this.registerBrokerWithFilterServer(ctx, request);
@@ -192,11 +193,15 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 
     public RemotingCommand registerBrokerWithFilterServer(ChannelHandlerContext ctx, RemotingCommand request)
         throws RemotingCommandException {
+        // 初始化响应对象，指定响应头的类型
         final RemotingCommand response = RemotingCommand.createResponseCommand(RegisterBrokerResponseHeader.class);
+        // 从响应中获取响应头，创建响应的时候已经指定了响应头类型
         final RegisterBrokerResponseHeader responseHeader = (RegisterBrokerResponseHeader) response.readCustomHeader();
+        // 解析请求中的请求头信息
         final RegisterBrokerRequestHeader requestHeader =
             (RegisterBrokerRequestHeader) request.decodeCommandCustomHeader(RegisterBrokerRequestHeader.class);
 
+        // crc32校验，对请求体进行crc32，将结果与请求头中的crc32对比
         if (!checksum(ctx, request, requestHeader)) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("crc32 not match");
@@ -207,6 +212,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 
         if (request.getBody() != null) {
             try {
+                // 解析请求体
                 registerBrokerBody = RegisterBrokerBody.decode(request.getBody(), requestHeader.isCompressed());
             } catch (Exception e) {
                 throw new RemotingCommandException("Failed to decode RegisterBrokerBody", e);
@@ -216,6 +222,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
             registerBrokerBody.getTopicConfigSerializeWrapper().getDataVersion().setTimestamp(0);
         }
 
+        // 更新路由表，结果中会返回主从同步地址和主节点地址
         RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
             requestHeader.getClusterName(),
             requestHeader.getBrokerAddr(),
@@ -226,7 +233,9 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
             registerBrokerBody.getFilterServerList(),
             ctx.channel());
 
+        // 返回主从那个同步地址
         responseHeader.setHaServerAddr(result.getHaServerAddr());
+        // 返回主节点地址
         responseHeader.setMasterAddr(result.getMasterAddr());
 
         byte[] jsonValue = this.namesrvController.getKvConfigManager().getKVListByNamespace(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG);
