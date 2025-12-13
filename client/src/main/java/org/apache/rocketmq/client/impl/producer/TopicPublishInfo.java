@@ -67,9 +67,11 @@ public class TopicPublishInfo {
     }
 
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
+        // lastBrokerName不为null说明消息没有发送失败或者是某个消息第一次发送出去，则根据计数器选择下一个队列
         if (lastBrokerName == null) {
             return selectOneMessageQueue();
         } else {
+            // 如果lastBrokerName不为null，说明消息发送失败后重新发送选择队列，选出的队列会规避上一此发送失败的broker
             int index = this.sendWhichQueue.getAndIncrement();
             for (int i = 0; i < this.messageQueueList.size(); i++) {
                 int pos = Math.abs(index++) % this.messageQueueList.size();
@@ -80,11 +82,13 @@ public class TopicPublishInfo {
                     return mq;
                 }
             }
+            // 如果所有队列全部发送失败，则只能选择下一个队列进行重试了
             return selectOneMessageQueue();
         }
     }
 
     public MessageQueue selectOneMessageQueue() {
+        // 每个topic路由信息维护了一个计数器sendWhichQueue，每次都根据计数器自增+1后选择下一个队列，算法：（sendWhichQueue + 1） % messageQueueList.size()
         int index = this.sendWhichQueue.getAndIncrement();
         int pos = Math.abs(index) % this.messageQueueList.size();
         if (pos < 0)

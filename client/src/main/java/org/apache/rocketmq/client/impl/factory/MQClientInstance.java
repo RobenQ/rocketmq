@@ -610,7 +610,9 @@ public class MQClientInstance {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
                     TopicRouteData topicRouteData;
+                    // 默认消费组
                     if (isDefault && defaultMQProducer != null) {
+                        // 默认消费组，请求namesrv获取路由信息使用默认的topic查询
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
                         if (topicRouteData != null) {
@@ -621,17 +623,22 @@ public class MQClientInstance {
                             }
                         }
                     } else {
+                        // 非默认的producer，使用消息中的topic获取路由信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
+                        // 获取缓存中的路由信息
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        // 判断路由原始信息是否变更
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            // 判断指定topic的路由信息是否需要变更
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
+                        // 发生变更
                         if (changed) {
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
