@@ -352,13 +352,16 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
+        // 消息存储组件关闭，返回失败
         if (this.shutdown) {
             log.warn("message store has shutdown, so putMessage is forbidden");
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // 从节点不允许处理消息发送code事件
         if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
             long value = this.printTimes.getAndIncrement();
+            // 5w此错误请求才打印一次错误日志
             if ((value % 50000) == 0) {
                 log.warn("message store is slave mode, so putMessage is forbidden ");
             }
@@ -366,6 +369,7 @@ public class DefaultMessageStore implements MessageStore {
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // 存储组件运行标识不可写，返回失败，一般可能是磁盘空间不足
         if (!this.runningFlags.isWriteable()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -374,9 +378,11 @@ public class DefaultMessageStore implements MessageStore {
 
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         } else {
+            // 日志打印计数器恢复默认
             this.printTimes.set(0);
         }
 
+        // topic长度不能大于127
         if (msg.getTopic().length() > Byte.MAX_VALUE) {
             log.warn("putMessage message topic length too long " + msg.getTopic().length());
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
@@ -387,23 +393,29 @@ public class DefaultMessageStore implements MessageStore {
             return new PutMessageResult(PutMessageStatus.PROPERTIES_SIZE_EXCEEDED, null);
         }
 
+        // 判断系统页缓存是否繁忙，默认是写页缓存时间在1~1w秒之间
         if (this.isOSPageCacheBusy()) {
             return new PutMessageResult(PutMessageStatus.OS_PAGECACHE_BUSY, null);
         }
 
         long beginTime = this.getSystemClock().now();
+        // 存储消息至commitLog文件中
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long elapsedTime = this.getSystemClock().now() - beginTime;
+        // 消息存在时间大于500ms打印告警日志
         if (elapsedTime > 500) {
             log.warn("putMessage not in lock elapsed time(ms)={}, bodyLength={}", elapsedTime, msg.getBody().length);
         }
+        // 设置最大的一次完整消息存储时间
         this.storeStatsService.setPutMessageEntireTimeMax(elapsedTime);
 
+        // 消息存储失败计数
         if (null == result || !result.isOk()) {
             this.storeStatsService.getPutMessageFailedTimes().incrementAndGet();
         }
 
+        // 返回消息存储结果
         return result;
     }
 
@@ -466,8 +478,10 @@ public class DefaultMessageStore implements MessageStore {
     @Override
     public boolean isOSPageCacheBusy() {
         long begin = this.getCommitLog().getBeginTimeInLock();
+        // 上一次写系统页缓存的持续时间
         long diff = this.systemClock.now() - begin;
 
+        // 持续时间小于1w秒且大于配置的超时时间（默认1s），返回繁忙
         return diff < 10000000
             && diff > this.messageStoreConfig.getOsPageCacheBusyTimeOutMills();
     }

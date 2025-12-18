@@ -565,6 +565,7 @@ public class CommitLog {
         int queueId = msg.getQueueId();
 
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
+        // 非事务消息和事务提交消息的特殊处理，主要是处理延迟消息的延迟级别
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery
@@ -599,8 +600,10 @@ public class CommitLog {
         long eclipsedTimeInLock = 0;
 
         MappedFile unlockMappedFile = null;
+        // 获取最后一个commitLog文件
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
+        // 获取消息写入锁
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
@@ -610,15 +613,18 @@ public class CommitLog {
             // global
             msg.setStoreTimestamp(beginLockTimestamp);
 
+            // 如果最后一个commitLog文件不存在或者文件已经写满，则创建一个新的
             if (null == mappedFile || mappedFile.isFull()) {
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
+            // mappedFile还是为null，说明创建失败，可能是磁盘满了
             if (null == mappedFile) {
                 log.error("create mapped file1 error, topic: " + msg.getTopic() + " clientAddr: " + msg.getBornHostString());
                 beginTimeInLock = 0;
                 return new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null);
             }
 
+            // 将消息写入commitLog文件
             result = mappedFile.appendMessage(msg, this.appendMessageCallback);
             switch (result.getStatus()) {
                 case PUT_OK:

@@ -287,6 +287,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
         switch (request.getCode()) {
             case RequestCode.SEND_BATCH_MESSAGE:
             case RequestCode.SEND_MESSAGE_V2:
+                // 单条消息和批量消息的请求头解析
                 requestHeaderV2 =
                     (SendMessageRequestHeaderV2) request
                         .decodeCommandCustomHeader(SendMessageRequestHeaderV2.class);
