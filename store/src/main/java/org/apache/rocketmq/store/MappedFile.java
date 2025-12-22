@@ -42,25 +42,35 @@ import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
 public class MappedFile extends ReferenceResource {
+    // 操作系统页大小，默认4KB
     public static final int OS_PAGE_SIZE = 1024 * 4;
     protected static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
+    // 写指针，从0开始
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
+    // 刷盘指针，flushedPosition总是小于或等于wrotePosition
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
+    // 文件大小
     protected int fileSize;
+    // 文件通道
     protected FileChannel fileChannel;
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
      */
+    // 写缓存，堆外内存的写缓存，从堆外内存池获取，消息首先会写入writeBuffer中，在写入fileChannel
     protected ByteBuffer writeBuffer = null;
+    // 堆外内存池
     protected TransientStorePool transientStorePool = null;
+    // 文件名称
     private String fileName;
+    // 文件初始偏移量
     private long fileFromOffset;
     private File file;
+    // 物理文件对应的内存buffer
     private MappedByteBuffer mappedByteBuffer;
     private volatile long storeTimestamp = 0;
     private boolean firstCreateInQueue = false;
@@ -205,6 +215,7 @@ public class MappedFile extends ReferenceResource {
 
         // 当前写入位置必须小于文件大小，大于文件大小时返回异常
         if (currentPos < this.fileSize) {
+            // 创建一个和原writeBuffer共享的内存区域
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result;
